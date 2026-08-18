@@ -1,0 +1,32 @@
+{
+  "name": "3dprintmaster",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "PWA that turns phone photos of an object into printable STL files, organised into a local project library.",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run selftest && tsc -b --noEmit && vite build",
+    "build:pages": "tsc -b --noEmit && vite build --base=/3dPrintMaster/",
+    "preview": "vite preview",
+    "icons": "node scripts/make-icons.mjs",
+    "typecheck": "tsc -b --noEmit",
+    "selftest": "esbuild scripts/selftest.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/selftest.mjs --log-level=warning && node node_modules/.cache/selftest.mjs",
+    "bench": "esbuild scripts/bench.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/bench.mjs --log-level=warning && node node_modules/.cache/bench.mjs",
+    "test-photos": "node scripts/make-test-photos.mjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.169.0",
+    "@vitejs/plugin-react": "^4.3.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "esbuild": "^0.21.5"
+  }
+}
