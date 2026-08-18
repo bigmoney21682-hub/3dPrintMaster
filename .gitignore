@@ -4,3 +4,4 @@ dist/
 *.local
 .vite/
 test-photos/
+tsconfig.tsbuildinfo
