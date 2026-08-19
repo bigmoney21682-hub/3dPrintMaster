@@ -11,6 +11,7 @@ import { meshToBinarySTL } from '../src/lib/stl';
 import { buildHeightfield } from '../src/lib/heightfield';
 import { segmentImage } from '../src/lib/segment';
 import { renderScene, W as SCENE_W, H as SCENE_H } from './scene.mjs';
+import { runSlicerChecks } from './slicer-tests';
 
 let failures = 0;
 function check(name: string, condition: boolean, detail = '') {
@@ -413,6 +414,8 @@ console.log('\nEnd to end: 16 rendered photos of a figure on a turntable');
   check('the head is narrower than the body', head < belly * 0.6, `head ${head.toFixed(3)} vs body ${belly.toFixed(3)}`);
   check('model is the right way up', widthAt(0.2) > widthAt(0.8), 'wider low than high');
 }
+
+runSlicerChecks(check, near);
 
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) FAILED.`}\n`);
 process.exit(failures === 0 ? 0 : 1);

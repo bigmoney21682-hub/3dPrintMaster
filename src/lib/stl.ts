@@ -57,6 +57,51 @@ export function meshToBinarySTL(mesh: Mesh, header = '3dPrintMaster'): ArrayBuff
   return buffer;
 }
 
+/**
+ * Read binary or ASCII STL back into a mesh.
+ *
+ * The triangles are kept unwelded: the slicer matches shared edges by
+ * coordinate value rather than vertex index, and STL writes identical floats
+ * for a shared edge, so stitching still closes cleanly.
+ */
+export function parseSTL(buffer: ArrayBuffer): Mesh {
+  const view = new DataView(buffer);
+  if (buffer.byteLength >= 84) {
+    const count = view.getUint32(80, true);
+    if (buffer.byteLength === 84 + count * 50) return parseBinary(view, count);
+  }
+  return parseAscii(new TextDecoder().decode(buffer));
+}
+
+function parseBinary(view: DataView, count: number): Mesh {
+  const positions = new Float32Array(count * 9);
+  const indices = new Uint32Array(count * 3);
+  for (let t = 0; t < count; t++) {
+    const base = 84 + t * 50 + 12; // skip the facet normal
+    for (let v = 0; v < 3; v++) {
+      const o = base + v * 12;
+      positions[t * 9 + v * 3] = view.getFloat32(o, true);
+      positions[t * 9 + v * 3 + 1] = view.getFloat32(o + 4, true);
+      positions[t * 9 + v * 3 + 2] = view.getFloat32(o + 8, true);
+      indices[t * 3 + v] = t * 3 + v;
+    }
+  }
+  return { positions, indices };
+}
+
+function parseAscii(text: string): Mesh {
+  const values: number[] = [];
+  const re = /vertex\s+(-?[\d.eE+-]+)\s+(-?[\d.eE+-]+)\s+(-?[\d.eE+-]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    values.push(Number(match[1]), Number(match[2]), Number(match[3]));
+  }
+  const positions = new Float32Array(values);
+  const indices = new Uint32Array(values.length / 3);
+  for (let i = 0; i < indices.length; i++) indices[i] = i;
+  return { positions, indices };
+}
+
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

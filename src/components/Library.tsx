@@ -120,9 +120,14 @@ export function Library() {
             </div>
           </div>
         ) : (
-          <button className="btn primary block" onClick={() => setCreating(true)}>
-            + New project
-          </button>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn primary" style={{ flex: 2 }} onClick={() => setCreating(true)}>
+              + New project
+            </button>
+            <button className="btn" style={{ flex: 1 }} onClick={() => navigate('slice')}>
+              Slice an STL
+            </button>
+          </div>
         )}
 
         {loading && !summaries && <div className="muted">Loading library…</div>}

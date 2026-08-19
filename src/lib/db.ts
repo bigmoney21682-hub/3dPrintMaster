@@ -9,6 +9,7 @@
 import type { SegmentOptions } from './segment';
 import type { CarveOptions } from './carve';
 import type { HeightfieldOptions } from './heightfield';
+import type { PrintSettings } from './slicer/settings';
 
 const DB_NAME = '3dprintmaster';
 const DB_VERSION = 1;
@@ -27,6 +28,8 @@ export interface Project {
   heightfield: Partial<HeightfieldOptions>;
   segment: Partial<SegmentOptions>;
   targetSizeMm: number;
+  /** Slicer settings, remembered per project. */
+  slicer?: Partial<PrintSettings>;
 }
 
 export interface Photo {

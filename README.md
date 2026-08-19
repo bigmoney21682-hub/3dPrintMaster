@@ -7,6 +7,8 @@ GitHub Pages as a static site — no server, no Render, no build backend.
 - **Scan an object** — 8 or more photos around a turntable become a solid 3D model.
 - **Relief from one photo** — a single picture becomes a raised relief, a
   lithophane, or a flat cut-out.
+- **Slice it** — a built-in FDM slicer turns any model, or any STL you open,
+  into G-code for a FlashForge, with a layer-by-layer preview.
 - **Project library** — photos, silhouette edits and finished STLs are stored on
   the device in IndexedDB, so it keeps working offline.
 
@@ -72,12 +74,65 @@ A visual hull cannot see concavities. The inside of a mug, a deep recess, or a h
 that never breaks the outline comes out filled in. Convex-ish objects — figurines,
 tools, toys, rocks, shoes — reconstruct well.
 
+## The slicer
+
+Save a model to a project and press **Slice**, or use **Slice an STL** on the home
+screen to open any STL from the device. The output is plain G-code — no FlashPrint
+in the middle.
+
+What it does:
+
+- Slices the mesh into layers, builds perimeters inside-out so the external wall
+  lands last, and detects top and bottom surfaces by comparing each layer against
+  the layers above and below (so solid material appears over holes and under
+  ledges, not only at the very top and bottom).
+- Rectilinear, grid or concentric infill; skirt and brim; retraction and Z hop.
+- Support material under overhangs, with a Z gap so it snaps off.
+- Estimates print time with a trapezoidal acceleration model, plus filament
+  length and weight.
+- A layer preview with a slider, colour-coded by what each move is doing.
+
+Machine profiles cover the Adventurer 3, Adventurer 4, Adventurer 5M/5M Pro,
+Creator Pro, Finder, Guider II and Dreamer, plus a generic FDM profile. Materials
+cover PLA, PETG, ABS and TPU.
+
+### Two things worth checking before you print
+
+**Bed origin.** FlashForge's own firmware puts 0,0 at the *centre* of the bed, so
+its G-code is full of negative coordinates; the Klipper-based Adventurer 5M uses
+the front-left corner like most other printers. Each profile carries the right
+setting and the slicer refuses to stay quiet if the toolpath leaves the bed, but
+if you have a file FlashPrint exported for your machine, it is worth a glance to
+confirm the convention matches.
+
+**Start G-code.** Every profile ships a conservative start and end block. The
+FlashForge-firmware profiles use `M132` after homing, the way FlashPrint does;
+the Klipper profile leaves it out, because Klipper aborts on a command it does not
+recognise rather than ignoring it. If your machine wants something specific, the
+blocks live in `src/lib/slicer/machines.ts`.
+
+### File formats
+
+`.gcode` and `.g` contain identical text — use `.g` if your printer's menu ignores
+`.gcode`. `.gx` wraps the same G-code in FlashPrint's container with an 80×60
+thumbnail; that format is community-documented rather than official, so it is
+offered as the fallback rather than the default. The G-code inside a `.gx` is byte
+identical to the plain export, so renaming always gets you back to something that
+works.
+
+### What the slicer does not do
+
+No multi-material, no variable layer height, no ironing or bridging detection, and
+supports are a single uniform type rather than tree supports. Carved models stand
+on a flat base and are mostly self-supporting, which is why supports default to
+off.
+
 ## Printing on a FlashForge
 
-Export the STL, open it in FlashPrint with *Load*, scale if you want, slice, save to
-a USB stick and print from the printer's USB menu. Carved models are solid shells
-with no interior detail, so 10–15% infill and 2 perimeters is usually plenty.
-Reliefs and lithophanes print flat on the bed with no supports.
+Slice, save the file to a USB stick, put it in the printer and choose it from the
+print menu. Or export the STL and open it in FlashPrint if you would rather use
+that. Carved models print well with 10–15% infill and 2 perimeters. Reliefs and
+lithophanes print flat on the bed with no supports.
 
 ## Development
 
@@ -112,6 +167,20 @@ modules with esbuild and checks them against known answers:
   object running off the frame, soft out-of-focus edges.
 - End to end: 16 rendered photos of a figure to a finished mesh, checking it stands
   on the bed, is the right way up, and has the right silhouette profile.
+- The slicer against primitives whose answers are known: a cube's cross-section
+  area, a cylinder's area against the exact polygon area, a square tube producing
+  two loops per layer.
+- Layer planning: perimeter counts and ordering, sparse infill in the middle,
+  solid top and bottom, and solid material appearing under a step rather than only
+  at the top of the model.
+- Supports: present under an overhanging table top, absent above it, never inside
+  the model, and gone entirely when switched off.
+- G-code: every coordinate on the bed, Z never descending, extrusion volume
+  matching a solid block of known size, oversized models warned about, no
+  FlashForge-only commands in Klipper output, and a true 3D scale changing
+  material use as the cube of the factor.
+- The `.gx` container: magic string, offsets, thumbnail size, and the G-code
+  surviving byte for byte.
 
 ## Deploying to GitHub Pages
 
@@ -132,10 +201,13 @@ src/lib/surfaceNets.ts  isosurface extraction
 src/lib/heightfield.ts  single-photo relief, lithophane and cut-out
 src/lib/mesh.ts         smoothing, orientation, scaling to print size
 src/lib/stl.ts          binary STL writer
+src/lib/slicer/         the FDM slicer: contours, perimeters, infill, supports,
+                        G-code, machine profiles, the .gx container
 src/lib/db.ts           IndexedDB project library
 src/lib/captureGuide.ts the photo-count guidance shown throughout the UI
 src/workers/            the reconstruction worker, so the UI never blocks
-src/components/         library, project, camera capture, outline editor, 3D viewer
+src/components/         library, project, camera capture, outline editor, 3D
+                        viewer, slicer and layer preview
 ```
 
 ## Privacy

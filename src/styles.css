@@ -431,6 +431,27 @@ label.field {
   height: 100%;
 }
 
+.layer-preview {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  line-height: 0;
+}
+
+.layer-preview canvas {
+  width: 100%;
+  display: block;
+}
+
+code {
+  background: var(--bg);
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  padding: 0 4px;
+  font-size: 0.85em;
+}
+
 .viewer .hint {
   position: absolute;
   right: 8px;

@@ -364,6 +364,9 @@ export function ProjectView({ projectId }: { projectId: string }) {
                 {w}
               </div>
             ))}
+            <div className="faint">
+              Save it to the project, then hit <strong>Slice</strong> on it to make a file your FlashForge can print.
+            </div>
             <div className="row">
               <button className="btn primary" onClick={saveResult}>
                 Save to project
@@ -391,6 +394,7 @@ export function ProjectView({ projectId }: { projectId: string }) {
                   key={model.id}
                   model={model}
                   now={now}
+                  onSlice={() => navigate(`p/${projectId}/slice/${model.id}`)}
                   onDelete={async () => {
                     await deleteModel(model.id);
                     reloadModels();
@@ -608,7 +612,17 @@ function ReliefSettings({
   );
 }
 
-function ModelRow({ model, now, onDelete }: { model: ModelRecord; now: number; onDelete: () => void }) {
+function ModelRow({
+  model,
+  now,
+  onSlice,
+  onDelete,
+}: {
+  model: ModelRecord;
+  now: number;
+  onSlice: () => void;
+  onDelete: () => void;
+}) {
   return (
     <div className="row wrap" style={{ alignItems: 'flex-start' }}>
       <div style={{ flex: 1, minWidth: 160 }}>
@@ -621,6 +635,9 @@ function ModelRow({ model, now, onDelete }: { model: ModelRecord; now: number; o
           {model.method} · {relativeTime(model.createdAt, now)}
         </div>
       </div>
+      <button className="btn small primary" onClick={onSlice}>
+        Slice
+      </button>
       <button className="btn small" onClick={() => downloadBlob(model.stl, `${safeFilename(model.name)}.stl`)}>
         ⤓ STL
       </button>
