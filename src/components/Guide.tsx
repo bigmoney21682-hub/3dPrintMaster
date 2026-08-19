@@ -50,15 +50,22 @@ export function Guide() {
         <div className="card stack">
           <h2>Printing on a FlashForge</h2>
           <ol className="steps">
-            <li>Export the STL from a finished model and save it to your phone or computer.</li>
-            <li>Open FlashPrint, then <em>Load</em> the STL. The model already arrives Z-up and standing on the bed.</li>
-            <li>Scale it if you want a different size, then slice and save the resulting file to a USB stick.</li>
-            <li>Put the stick in the printer and print from the USB menu.</li>
+            <li>Save a finished model to the project, then press <strong>Slice</strong> on it.</li>
+            <li>Pick your printer and material, check the layer preview, and export the file.</li>
+            <li>Copy it to a USB stick and print it from the printer's USB menu.</li>
           </ol>
           <p className="faint">
-            Carved models are solid shells with no interior detail, so 10–15% infill and 2 perimeters is usually
-            plenty. Reliefs and lithophanes print best flat on the bed with no supports.
+            10–15% infill and 2 walls suits most carved models; solid top and bottom layers are added for you.
+            Reliefs and lithophanes print flat on the bed with no supports. You can also export the STL and slice it
+            in FlashPrint instead, and the slicer here will open any STL from your device, not just the ones it made.
           </p>
+          <div className="callout info">
+            Two settings are worth a glance before a first print: the <strong>bed origin</strong> (FlashForge firmware
+            puts 0,0 at the centre of the bed, the Klipper-based Adventurer 5M puts it at the front-left) and the
+            <strong> file extension</strong> — <code>.gcode</code> and <code>.g</code> are the same text, and{' '}
+            <code>.gx</code> is the FlashPrint-style container to fall back on if the printer's menu ignores the
+            others.
+          </div>
         </div>
 
         <div className="card stack">

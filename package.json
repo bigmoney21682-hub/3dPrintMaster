@@ -13,7 +13,8 @@
     "typecheck": "tsc -b --noEmit",
     "selftest": "esbuild scripts/selftest.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/selftest.mjs --log-level=warning && node node_modules/.cache/selftest.mjs",
     "bench": "esbuild scripts/bench.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/bench.mjs --log-level=warning && node node_modules/.cache/bench.mjs",
-    "test-photos": "node scripts/make-test-photos.mjs"
+    "test-photos": "node scripts/make-test-photos.mjs",
+    "test-stl": "node scripts/make-test-stl.mjs"
   },
   "dependencies": {
     "clipper-lib": "^6.4.2",
