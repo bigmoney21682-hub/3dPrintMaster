@@ -83,6 +83,7 @@ export function ProjectView({ projectId }: { projectId: string }) {
     setResult(null);
     setWarnings([]);
     setProgress({ fraction: 0, label: 'Preparing photos' });
+    const carveOpts = { ...DEFAULT_CARVE_OPTIONS, ...project.carve };
 
     try {
       let mesh: Mesh;
@@ -145,7 +146,7 @@ export function ProjectView({ projectId }: { projectId: string }) {
           setProgress(null);
           return;
         }
-        const job = await reconstruct(views, { ...DEFAULT_CARVE_OPTIONS, ...project.carve }, setProgress);
+        const job = await reconstruct(views, carveOpts, setProgress);
         mesh = job.mesh;
 
         if (import.meta.env.DEV) console.table(job.diagnostics);
@@ -175,7 +176,26 @@ export function ProjectView({ projectId }: { projectId: string }) {
       }
 
       if (mesh.indices.length === 0) {
-        notify('Nothing was left after carving. Check the outlines.');
+        /*
+         * The carve is an intersection: a voxel has to sit inside the silhouette
+         * of every view to survive. An empty result means no point in space was
+         * inside all of them at once — so the diagnostics collected above are
+         * exactly what the user needs, and dropping them (as this used to) left
+         * them with nothing to act on.
+         */
+        setWarnings([
+          'Nothing was left after carving. A voxel only survives if it lands inside the outline in every photo, so one bad outline — or photos that were not really shot at the angles the app assumed — can erase the whole model.',
+          ...notes,
+          ...(notes.length === 0
+            ? [
+                'Every outline looked reasonable on its own, which points at the angles. The app assumes the photos are one even rotation, in order, all the way around. Mixing two sets — a gallery import plus a camera session, or two different objects — breaks that assumption.',
+              ]
+            : []),
+          `Tolerance is ${carveOpts.tolerance}, so ${
+            carveOpts.tolerance === 0 ? 'a single disagreeing photo removes everything' : `up to ${carveOpts.tolerance} photos may disagree`
+          }. Raising it lets an imperfect outline through.`,
+        ]);
+        notify('Nothing was left after carving');
         setProgress(null);
         return;
       }
@@ -369,6 +389,16 @@ export function ProjectView({ projectId }: { projectId: string }) {
           </div>
         )}
 
+        {warnings.length > 0 && (
+          <div className="stack">
+            {warnings.map((w) => (
+              <div className="callout warn" key={w}>
+                {w}
+              </div>
+            ))}
+          </div>
+        )}
+
         {result && (
           <div className="card stack">
             <div className="row">
@@ -381,11 +411,6 @@ export function ProjectView({ projectId }: { projectId: string }) {
               Print size {result.size[0].toFixed(1)} × {result.size[2].toFixed(1)} × {result.size[1].toFixed(1)} mm
               (W × D × H). The STL is exported Z-up, standing on the bed.
             </div>
-            {warnings.map((w) => (
-              <div className="callout warn" key={w}>
-                {w}
-              </div>
-            ))}
             <div className="faint">
               Save it to the project, then hit <strong>Slice</strong> on it to make a file your FlashForge can print.
             </div>
