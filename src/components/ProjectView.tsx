@@ -114,14 +114,36 @@ export function ProjectView({ projectId }: { projectId: string }) {
         }
         setProgress({ fraction: 0.02, label: 'Reading photos' });
         const views = [];
+        const unreadable: number[] = [];
         for (const photo of usable) {
-          const raster = await loadRaster(photo.blob, DEFAULT_WORK_SIZE);
+          let raster;
+          try {
+            raster = await loadRaster(photo.blob, DEFAULT_WORK_SIZE);
+          } catch {
+            // One damaged photo should not cost the user the whole carve.
+            unreadable.push(photo.angleDeg);
+            continue;
+          }
           views.push({
             image: raster,
             angleDeg: photo.angleDeg,
             options: { ...project.segment, ...photo.segment },
             paint: photo.paint,
           });
+        }
+        if (unreadable.length > 0) {
+          notes.push(
+            `${unreadable.length} photo${unreadable.length === 1 ? '' : 's'} could not be read (at ${unreadable
+              .map((a) => `${Math.round(a)}°`)
+              .join(', ')}) and ${unreadable.length === 1 ? 'was' : 'were'} skipped. Delete ${
+              unreadable.length === 1 ? 'it' : 'them'
+            } and add ${unreadable.length === 1 ? 'it' : 'them'} again from your gallery.`,
+          );
+        }
+        if (views.length < 2) {
+          notify('Not enough readable photos to carve. Re-add them from your gallery.');
+          setProgress(null);
+          return;
         }
         const job = await reconstruct(views, { ...DEFAULT_CARVE_OPTIONS, ...project.carve }, setProgress);
         mesh = job.mesh;
