@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import {
   deleteModel,
   deletePhoto,
+  deletePhotosForProject,
   getProject,
   listModels,
   listPhotos,
@@ -18,6 +19,8 @@ import { DEFAULT_CARVE_OPTIONS } from '../lib/carve';
 import { DEFAULT_HEIGHTFIELD_OPTIONS, type HeightfieldMode } from '../lib/heightfield';
 import { fitToPrintVolume, meshBounds, triangleCount, yUpToZUp, type Mesh } from '../lib/mesh';
 import { meshToBinarySTL, downloadBlob, safeFilename } from '../lib/stl';
+import { shareFiles } from '../lib/share';
+import { formatDuration } from '../lib/slicer/gcode';
 import { heightfield as buildHeightfieldJob, reconstruct } from '../lib/reconClient';
 import { useNavigate } from '../lib/useHashRoute';
 import { AppBar, ProgressOverlay, Slider, ToggleGroup, formatBytes, relativeTime, useAsync, useNow, useObjectUrl, useToast } from './ui';
@@ -236,8 +239,25 @@ export function ProjectView({ projectId }: { projectId: string }) {
       params: isRelief ? { ...project.heightfield } : { ...project.carve, targetSizeMm: project.targetSizeMm },
     };
     await saveModel(record);
+
+    /*
+     * The photos have done their job. They are the bulk of a project on disk —
+     * a 24-shot set is tens of megabytes against a couple for the STL — and
+     * what gets printed from here on is the model and its G-code. Clearing them
+     * is one-way, so `keepPhotos` opts out for anyone still iterating on the
+     * carve settings.
+     */
+    if (project.keepPhotos) {
+      reloadModels();
+      notify('Saved to project');
+      return;
+    }
+    const cleared = await deletePhotosForProject(projectId);
+    reloadPhotos();
     reloadModels();
-    notify('Saved to project');
+    setResult(null);
+    setWarnings([]);
+    notify(cleared > 0 ? `Saved — ${cleared} photo${cleared === 1 ? '' : 's'} cleared` : 'Saved to project');
   };
 
   if (!project) {
@@ -382,6 +402,18 @@ export function ProjectView({ projectId }: { projectId: string }) {
           {isRelief ? 'Build relief' : `Carve 3D model from ${usable.length} photos`}
         </button>
 
+        <label className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
+          <input
+            type="checkbox"
+            checked={!project.keepPhotos}
+            onChange={(e) => void patch({ keepPhotos: !e.target.checked })}
+          />
+          <span className="faint">
+            Clear the photos once a model is saved, leaving just the STL and its printable file. Uncheck this while
+            you are still adjusting the carve — clearing cannot be undone.
+          </span>
+        </label>
+
         {!isRelief && usable.length > 0 && usable.length < MINIMUM_FOR_3D && (
           <div className="callout warn">
             You can build with {usable.length}, but expect flat facets. {MINIMUM_FOR_3D} photos is the minimum for a
@@ -426,7 +458,21 @@ export function ProjectView({ projectId }: { projectId: string }) {
                   downloadBlob(new Blob([stl], { type: 'model/stl' }), `${safeFilename(project.name)}.stl`);
                 }}
               >
-                Export STL
+                ⤓ STL
+              </button>
+              <button
+                className="btn"
+                onClick={async () => {
+                  const stl = meshToBinarySTL(yUpToZUp(result.mesh), project.name);
+                  const file = {
+                    blob: new Blob([stl], { type: 'model/stl' }),
+                    filename: `${safeFilename(project.name)}.stl`,
+                  };
+                  const how = await shareFiles([file], project.name, 'STL from 3dPrintMaster');
+                  if (how === 'downloaded') notify('Sharing is not available here — downloaded instead');
+                }}
+              >
+                Share
               </button>
             </div>
           </div>
@@ -446,6 +492,7 @@ export function ProjectView({ projectId }: { projectId: string }) {
                     await deleteModel(model.id);
                     reloadModels();
                   }}
+                  onShareFallback={() => notify('Sharing is not available here — downloaded instead')}
                 />
               ))}
             </div>
@@ -664,12 +711,23 @@ function ModelRow({
   now,
   onSlice,
   onDelete,
+  onShareFallback,
 }: {
   model: ModelRecord;
   now: number;
   onSlice: () => void;
   onDelete: () => void;
+  onShareFallback: () => void;
 }) {
+  const base = safeFilename(model.name);
+  const sliced = model.slice;
+  // Everything the printer needs, in one place: the model and, once it has been
+  // sliced, the file that actually goes on the machine.
+  const files = [
+    { blob: model.stl, filename: `${base}.stl` },
+    ...(sliced ? [{ blob: sliced.gcode, filename: `${base}.gcode` }] : []),
+  ];
+
   return (
     <div className="row wrap" style={{ alignItems: 'flex-start' }}>
       <div style={{ flex: 1, minWidth: 160 }}>
@@ -681,12 +739,32 @@ function ModelRow({
         <div className="faint">
           {model.method} · {relativeTime(model.createdAt, now)}
         </div>
+        {sliced && (
+          <div className="faint">
+            ✓ sliced · {sliced.layerCount} layers · {formatDuration(sliced.estimatedSeconds)} ·{' '}
+            {formatBytes(sliced.gcode.size)} of G-code
+          </div>
+        )}
       </div>
       <button className="btn small primary" onClick={onSlice}>
-        Slice
+        {sliced ? 'Re-slice' : 'Slice'}
       </button>
-      <button className="btn small" onClick={() => downloadBlob(model.stl, `${safeFilename(model.name)}.stl`)}>
+      <button className="btn small" onClick={() => downloadBlob(model.stl, `${base}.stl`)}>
         ⤓ STL
+      </button>
+      {sliced && (
+        <button className="btn small" onClick={() => downloadBlob(sliced.gcode, `${base}.gcode`)}>
+          ⤓ G-code
+        </button>
+      )}
+      <button
+        className="btn small"
+        onClick={async () => {
+          const how = await shareFiles(files, model.name, sliced ? 'STL and G-code from 3dPrintMaster' : 'STL from 3dPrintMaster');
+          if (how === 'downloaded') onShareFallback();
+        }}
+      >
+        Share
       </button>
       <button className="btn small ghost danger" onClick={onDelete} aria-label="Delete model">
         ✕

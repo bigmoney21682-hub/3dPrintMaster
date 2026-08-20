@@ -30,6 +30,11 @@ export interface Project {
   targetSizeMm: number;
   /** Slicer settings, remembered per project. */
   slicer?: Partial<PrintSettings>;
+  /**
+   * Photos are working material: once a model is saved they cost megabytes and
+   * are not needed to print. They are cleared automatically unless this is set.
+   */
+  keepPhotos?: boolean;
 }
 
 export interface Photo {
@@ -49,6 +54,19 @@ export interface Photo {
   excluded?: boolean;
 }
 
+/** A sliced, printer-ready result kept alongside the model that made it. */
+export interface SliceRecord {
+  /** Plain G-code text. Every export format is rebuilt from this. */
+  gcode: Blob;
+  /** 80x60 RGB thumbnail, so a `.gx` can be written without re-slicing. */
+  thumbnail: Uint8Array;
+  layerCount: number;
+  estimatedSeconds: number;
+  filamentMm: number;
+  settings: Record<string, unknown>;
+  createdAt: number;
+}
+
 export interface ModelRecord {
   id: string;
   projectId: string;
@@ -61,6 +79,8 @@ export interface ModelRecord {
   photoCount: number;
   preview?: Blob;
   params: Record<string, unknown>;
+  /** Set once the model has been sliced; this is the file the printer wants. */
+  slice?: SliceRecord;
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -146,6 +166,17 @@ export async function listPhotos(projectId: string): Promise<Photo[]> {
 
 export async function savePhoto(photo: Photo): Promise<void> {
   await tx('photos', 'readwrite', (s) => s.put(photo));
+}
+
+/**
+ * Drop every photo in a project. Called once a model is saved: the STL and its
+ * G-code are what get printed, and the photos are an order of magnitude larger.
+ * Returns how many went, so the UI can say so.
+ */
+export async function deletePhotosForProject(projectId: string): Promise<number> {
+  const photos = await listPhotos(projectId);
+  await Promise.all(photos.map((p) => deletePhoto(p.id)));
+  return photos.length;
 }
 
 export async function deletePhoto(id: string): Promise<void> {

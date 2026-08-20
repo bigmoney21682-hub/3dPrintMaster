@@ -40,6 +40,11 @@ export function Guide() {
             that falls outside any silhouette — the classic “visual hull” or space-carving method. It runs entirely in
             your browser; no photo ever leaves the device.
           </p>
+          <p className="muted">
+            Saving a model clears that project's photos: they have done their job, they are the bulk of what the app
+            stores, and what you print from then on is the STL and its sliced file. Untick the box above the carve
+            button to hold on to them while you are still tuning the settings.
+          </p>
           <div className="callout warn">
             <strong>What it cannot do:</strong> silhouettes cannot see into hollows. The inside of a mug, a deep
             recess, or a hole that never breaks the outline will come out filled in. Convex-ish objects — figurines,

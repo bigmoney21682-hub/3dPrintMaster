@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getProject, listModels, saveProject, type ModelRecord, type Project } from '../lib/db';
+import { getProject, listModels, saveModel, saveProject, type ModelRecord, type Project } from '../lib/db';
 import { parseSTL, downloadBlob, safeFilename } from '../lib/stl';
+import { canShareFiles, shareFiles } from '../lib/share';
 import { meshBounds, triangleCount, type Mesh } from '../lib/mesh';
 import { slice, type SliceOutcome } from '../lib/sliceClient';
 import { DEFAULT_SETTINGS, type InfillPattern, type PrintSettings } from '../lib/slicer/settings';
@@ -26,12 +27,17 @@ export function SliceView({ projectId, modelId }: { projectId?: string; modelId?
 
   const [project, setProject] = useState<Project | null>(null);
   const [source, setSource] = useState<{ name: string; mesh: Mesh } | null>(null);
+  const [model, setModel] = useState<ModelRecord | null>(null);
   const [settings, setSettings] = useState<PrintSettings>(DEFAULT_SETTINGS);
   const [progress, setProgress] = useState<{ fraction: number; label: string } | null>(null);
   const [outcome, setOutcome] = useState<SliceOutcome | null>(null);
   const [layerIndex, setLayerIndex] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  const sharingAvailable = useMemo(
+    () => canShareFiles([{ blob: new Blob(['x'], { type: 'text/plain' }), filename: 'probe.gcode' }]),
+    [],
+  );
   const machine = machineById(settings.machineId);
   const material = materialById(settings.materialId);
 
@@ -47,6 +53,7 @@ export function SliceView({ projectId, modelId }: { projectId?: string; modelId?
         return;
       }
       setProject(prj ?? null);
+      setModel(model);
       if (prj?.slicer) setSettings((s) => ({ ...s, ...prj.slicer }));
       try {
         const mesh = parseSTL(await model.stl.arrayBuffer());
@@ -99,6 +106,29 @@ export function SliceView({ projectId, modelId }: { projectId?: string; modelId?
       const result = await slice(source.mesh, settings, (fraction, label) => setProgress({ fraction, label }));
       setOutcome(result);
       setLayerIndex(Math.min(result.stats.layerCount - 1, Math.floor(result.stats.layerCount / 2)));
+
+      /*
+       * Keep the G-code with the model. Once the photos are gone the project is
+       * meant to be exactly what the printer needs, and re-slicing on the phone
+       * to get the file back would be a minute of work for nothing. The
+       * thumbnail rides along so a `.gx` can still be written later.
+       */
+      if (model) {
+        const stored: ModelRecord = {
+          ...model,
+          slice: {
+            gcode: new Blob([result.gcode], { type: 'text/plain' }),
+            thumbnail: renderThumbnail(result.preview),
+            layerCount: result.stats.layerCount,
+            estimatedSeconds: result.stats.estimatedSeconds,
+            filamentMm: result.stats.filamentMm,
+            settings: { ...settings },
+            createdAt: Date.now(),
+          },
+        };
+        await saveModel(stored);
+        setModel(stored);
+      }
       notify(`Sliced into ${result.stats.layerCount} layers`);
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Slicing failed');
@@ -107,12 +137,11 @@ export function SliceView({ projectId, modelId }: { projectId?: string; modelId?
     }
   };
 
-  const exportFile = (extension: 'gcode' | 'g' | 'gx') => {
-    if (!outcome || !source) return;
+  const buildFile = (extension: 'gcode' | 'g' | 'gx') => {
+    if (!outcome || !source) return null;
     const name = safeFilename(source.name);
     if (extension === 'gx') {
-      const thumb = renderThumbnail(outcome.preview);
-      const bytes = buildGx(outcome.gcode, thumb, {
+      const bytes = buildGx(outcome.gcode, renderThumbnail(outcome.preview), {
         printSeconds: outcome.stats.estimatedSeconds,
         filamentMm: outcome.stats.filamentMm,
         layerHeightMm: settings.layerHeight,
@@ -121,10 +150,25 @@ export function SliceView({ projectId, modelId }: { projectId?: string; modelId?
         bedTemp: machine.heatedBed ? material.bedTemp : 0,
         nozzleTemp: material.nozzleTemp,
       });
-      downloadBlob(new Blob([bytes], { type: 'application/octet-stream' }), `${name}.gx`);
-      return;
+      return { blob: new Blob([bytes], { type: 'application/octet-stream' }), filename: `${name}.gx` };
     }
-    downloadBlob(new Blob([outcome.gcode], { type: 'text/plain' }), `${name}.${extension}`);
+    return { blob: new Blob([outcome.gcode], { type: 'text/plain' }), filename: `${name}.${extension}` };
+  };
+
+  const exportFile = (extension: 'gcode' | 'g' | 'gx') => {
+    const file = buildFile(extension);
+    if (file) downloadBlob(file.blob, file.filename);
+  };
+
+  /**
+   * The share sheet is the route to Messages, Mail, AirDrop and Drive — a phone
+   * has nowhere useful to "download" a file to otherwise.
+   */
+  const shareFile = async (extension: 'gcode' | 'g' | 'gx') => {
+    const file = buildFile(extension);
+    if (!file) return;
+    const how = await shareFiles([file], source?.name ?? 'Print file', 'Sliced with 3dPrintMaster');
+    if (how === 'downloaded') notify('Sharing is not available here — downloaded instead');
   };
 
   const modelInfo = useMemo(() => {
@@ -365,6 +409,19 @@ export function SliceView({ projectId, modelId }: { projectId?: string; modelId?
                     <button className="btn ghost" onClick={() => exportFile('gx')}>
                       ⤓ .gx
                     </button>
+                  </div>
+                  <div className="row wrap">
+                    <button className="btn" onClick={() => void shareFile('gcode')}>
+                      Share .gcode
+                    </button>
+                    <button className="btn ghost" onClick={() => void shareFile('gx')}>
+                      Share .gx
+                    </button>
+                  </div>
+                  <div className="faint">
+                    {sharingAvailable
+                      ? 'Share opens your phone\u2019s share sheet — Messages, Mail, AirDrop, Drive, or straight into the printer\u2019s own app. Email cannot take an attachment any other way from a web page.'
+                      : 'This browser cannot open a share sheet, so Share will download the file instead. On a phone it offers Messages, Mail and AirDrop.'}
                   </div>
                   <div className="faint">
                     <strong>.gcode</strong> and <strong>.g</strong> hold identical text — use <strong>.g</strong> if
